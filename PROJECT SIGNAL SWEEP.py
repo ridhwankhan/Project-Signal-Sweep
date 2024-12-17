@@ -2,8 +2,6 @@ import sys
 import os
 import math
 import simpleaudio as sa
-import asyncio
-from bleak import BleakScanner
 from OpenGL.GL import *
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
@@ -17,9 +15,6 @@ radius = 200
 sweep_angle = 0.0
 paused = False
 color_mode = 0  # 0: Green theme, 1: Blue theme, 2: Orange theme
-
-# Bluetooth devices
-devices = []
 
 # Button coordinates
 button_y_top = 280
@@ -38,31 +33,11 @@ beep_path = os.path.join(script_dir, "beep.wav")
 # Load sound
 sound_wave = sa.WaveObject.from_wave_file(beep_path)
 
-class Device:
-    def __init__(self, address, name, rssi, angle):
-        self.address = address
-        self.name = name
-        self.rssi = rssi
-        self.angle = angle
-
-async def discover_devices():
-    global devices
-    devices = []
-    raw_devices = await BleakScanner.discover()
-    num_devices = len(raw_devices)
-    for i, device in enumerate(raw_devices):
-        angle = (360 / num_devices) * i  # Distribute devices evenly around the radar
-        devices.append(Device(device.address, device.name, device.rssi, angle))
-    devices.sort(key=lambda d: d.rssi, reverse=True)
-    print("System startover. Devices from highest to lowest signal strength:")
-    for device in devices:
-        print(f"Device: {device.name}, Address: {device.address}, RSSI: {device.rssi}")
-
 def reshape(w, h):
     glViewport(0, 0, w, h)
     glMatrixMode(GL_PROJECTION)
     glLoadIdentity()
-    glOrtho(-width / 2, width / 2, -height / 2, height / 2, -1, 1)
+    glOrtho(-width/2, width/2, -height/2, height/2, -1, 1)
     glMatrixMode(GL_MODELVIEW)
     glLoadIdentity()
 
@@ -81,9 +56,9 @@ def midpoint_circle(x0, y0, r):
         glVertex2i(x0 + y, y0 - x)
         glVertex2i(x0 - y, y0 - x)
         if d < 0:
-            d += 2 * x + 3
+            d += 2*x + 3
         else:
-            d += 2 * (x - y) + 5
+            d += 2*(x - y) + 5
             y -= 1
         x += 1
     glEnd()
@@ -102,22 +77,23 @@ def midpoint_line(x0, y0, x1, y1):
     dy = y1 - y0
     yi = 1 if dy >= 0 else -1
     dy = abs(dy)
-    D = 2 * dy - dx
+    D = 2*dy - dx
     y = y0
     glBegin(GL_POINTS)
-    for x in range(x0, x1 + 1):
+    for x in range(x0, x1+1):
         if steep:
             glVertex2i(y, x)
         else:
             glVertex2i(x, y)
         if D > 0:
             y += yi
-            D -= 2 * dx
-        D += 2 * dy
+            D -= 2*dx
+        D += 2*dy
     glEnd()
 
 def get_colors():
     if color_mode == 0:
+        # Classic Green Radar
         return {
             "background": (0.0, 0.0, 0.0),
             "radar_line": (0.0, 1.0, 0.0),
@@ -127,6 +103,7 @@ def get_colors():
             "button_symbol": (0.0, 1.0, 0.0)
         }
     elif color_mode == 1:
+        # Blue Theme
         return {
             "background": (0.0, 0.0, 0.1),
             "radar_line": (0.0, 1.0, 1.0),
@@ -136,6 +113,7 @@ def get_colors():
             "button_symbol": (1.0, 1.0, 1.0)
         }
     else:
+        # Orange Theme
         return {
             "background": (0.1, 0.05, 0.0),
             "radar_line": (1.0, 0.5, 0.0),
@@ -160,28 +138,10 @@ def draw_radar():
         y_end = int(radius * math.sin(angle_rad))
         midpoint_line(center_x, center_y, x_end, y_end)
 
-def draw_device(device, blink):
-    signal_strength = device.rssi
-    distance = 100 - (signal_strength + 100) * (radius / 100)  # Convert RSSI to distance
-    angle_rad = math.radians(device.angle)
-    x = int(center_x + distance * math.cos(angle_rad))
-    y = int(center_y + distance * math.sin(angle_rad))
-
-    if blink:
-        glColor3f(1.0, 0.0, 0.0)
-        glPointSize(10)
-    else:
-        glColor3f(1.0, 1.0, 1.0)
-        glPointSize(5)
-
-    glBegin(GL_POINTS)
-    glVertex2i(x, y)
-    glEnd()
-
 def draw_sweep_line(angle):
     c = get_colors()
     if paused:
-        glColor3f(c["sweep_line"][0] * 0.5, c["sweep_line"][1] * 0.5, c["sweep_line"][2] * 0.5)
+        glColor3f(c["sweep_line"][0]*0.5, c["sweep_line"][1]*0.5, c["sweep_line"][2]*0.5)
     else:
         glColor3f(*c["sweep_line"])
     x_end = int(radius * math.cos(angle))
@@ -191,8 +151,8 @@ def draw_sweep_line(angle):
 def fill_rectangle(x_min, x_max, y_min, y_max, color):
     glColor3f(*color)
     glBegin(GL_POINTS)
-    for x in range(x_min, x_max + 1):
-        for y in range(y_min, y_max + 1):
+    for x in range(x_min, x_max+1):
+        for y in range(y_min, y_max+1):
             glVertex2i(x, y)
     glEnd()
 
@@ -205,52 +165,49 @@ def draw_button_outline(x_min, x_max, y_min, y_max, color):
 
 def draw_reset_symbol(x_center, y_center, color):
     glColor3f(*color)
-    # Draw the "R" shape
-    midpoint_line(x_center - 3, y_center - 3, x_center - 3, y_center + 3)
-    midpoint_line(x_center - 3, y_center + 3, x_center + 1, y_center + 3)
-    midpoint_line(x_center - 3, y_center, x_center + 1, y_center)
-    midpoint_line(x_center - 1, y_center, x_center + 2, y_center - 3)
-                                                                                                                                         
-def draw_reset_symbol(x_center, y_center, color):
-    glColor3f(*color)
-    midpoint_line(x_center - 3, y_center - 3, x_center - 3, y_center + 3)
-    midpoint_line(x_center - 3, y_center + 3, x_center + 1, y_center + 3)
-    midpoint_line(x_center - 3, y_center, x_center + 1, y_center)
-    midpoint_line(x_center - 1, y_center, x_center + 2, y_center - 3)
+    # "R" shape
+    midpoint_line(x_center-3, y_center-3, x_center-3, y_center+3)
+    midpoint_line(x_center-3, y_center+3, x_center+1, y_center+3)
+    midpoint_line(x_center-3, y_center, x_center+1, y_center)
+    midpoint_line(x_center-1, y_center, x_center+2, y_center-3)
 
 def draw_play_pause_symbol(x_center, y_center, symbol_color):
     glColor3f(*symbol_color)
     if paused:
         # Play symbol: a right-pointing triangle
-        midpoint_line(x_center - 3, y_center - 3, x_center + 4, y_center)
-        midpoint_line(x_center + 4, y_center, x_center - 3, y_center + 3)
-        midpoint_line(x_center - 3, y_center - 3, x_center - 3, y_center + 3)
+        # Coordinates form a triangle pointing right:
+        # Top:    (x_center-3, y_center-3)
+        # Tip:    (x_center+4, y_center)
+        # Bottom: (x_center-3, y_center+3)
+        midpoint_line(x_center-3, y_center-3, x_center+4, y_center)
+        midpoint_line(x_center+4, y_center, x_center-3, y_center+3)
+        midpoint_line(x_center-3, y_center-3, x_center-3, y_center+3)
     else:
         # Pause symbol "||"
-        midpoint_line(x_center - 2, y_center - 3, x_center - 2, y_center + 3)
-        midpoint_line(x_center + 2, y_center - 3, x_center + 2, y_center + 3)
+        midpoint_line(x_center-2, y_center-3, x_center-2, y_center+3)
+        midpoint_line(x_center+2, y_center-3, x_center+2, y_center+3)
 
 def draw_close_symbol(x_center, y_center, color):
     glColor3f(*color)
-    midpoint_line(x_center - 3, y_center - 3, x_center + 3, y_center + 3)
-    midpoint_line(x_center - 3, y_center + 3, x_center + 3, y_center - 3)
+    midpoint_line(x_center-3, y_center-3, x_center+3, y_center+3)
+    midpoint_line(x_center-3, y_center+3, x_center+3, y_center-3)
 
 def draw_buttons():
     c = get_colors()
     # Reset Button
     fill_rectangle(reset_button_x_min, reset_button_x_max, button_y_bottom, button_y_top, c["button_fill"])
     draw_button_outline(reset_button_x_min, reset_button_x_max, button_y_bottom, button_y_top, c["button_outline"])
-    draw_reset_symbol((reset_button_x_min + reset_button_x_max) // 2, (button_y_bottom + button_y_top) // 2, c["button_symbol"])
+    draw_reset_symbol((reset_button_x_min+reset_button_x_max)//2, (button_y_bottom+button_y_top)//2, c["button_symbol"])
 
     # Play/Pause Button
     fill_rectangle(play_button_x_min, play_button_x_max, button_y_bottom, button_y_top, c["button_fill"])
     draw_button_outline(play_button_x_min, play_button_x_max, button_y_bottom, button_y_top, c["button_outline"])
-    draw_play_pause_symbol((play_button_x_min + play_button_x_max) // 2, (button_y_bottom + button_y_top) // 2, c["button_symbol"])
+    draw_play_pause_symbol((play_button_x_min+play_button_x_max)//2, (button_y_bottom+button_y_top)//2, c["button_symbol"])
 
     # Close Button
     fill_rectangle(close_button_x_min, close_button_x_max, button_y_bottom, button_y_top, c["button_fill"])
     draw_button_outline(close_button_x_min, close_button_x_max, button_y_bottom, button_y_top, c["button_outline"])
-    draw_close_symbol((close_button_x_min + close_button_x_max) // 2, (button_y_bottom + button_y_top) // 2, c["button_symbol"])
+    draw_close_symbol((close_button_x_min+close_button_x_max)//2, (button_y_bottom+button_y_top)//2, c["button_symbol"])
 
 def display():
     c = get_colors()
@@ -260,42 +217,43 @@ def display():
 
     draw_radar()
     draw_sweep_line(math.radians(sweep_angle))
-    for device in devices:
-        draw_device(device, abs((sweep_angle % 360) - device.angle) < 1)
     draw_buttons()
 
     glutSwapBuffers()
 
 def update(value):
     global sweep_angle
+    previous_angle = sweep_angle
     if not paused:
-        previous_angle = sweep_angle
         sweep_angle += 2.0
         if sweep_angle >= 360.0:
             sweep_angle -= 360.0
 
-        # If we completed a rotation, play the beep
-        if previous_angle > sweep_angle:
-            sound_wave.play()
+    # If we completed a rotation, play the beep
+    if previous_angle > sweep_angle and not paused:
+        sound_wave.play()
 
     glutPostRedisplay()
     glutTimerFunc(50, update, 0)
 
 def on_mouse_click(button, state, mx, my):
     if button == GLUT_LEFT_BUTTON and state == GLUT_DOWN:
-        world_x = mx - width / 2
-        world_y = (height / 2) - my
+        world_x = mx - width/2
+        world_y = (height/2) - my
 
         # Reset button
-        if reset_button_x_min <= world_x <= reset_button_x_max and button_y_bottom <= world_y <= button_y_top:
+        if (reset_button_x_min <= world_x <= reset_button_x_max and
+            button_y_bottom <= world_y <= button_y_top):
             reset_action()
 
         # Play/Pause button
-        elif play_button_x_min <= world_x <= play_button_x_max and button_y_bottom <= world_y <= button_y_top:
+        elif (play_button_x_min <= world_x <= play_button_x_max and
+              button_y_bottom <= world_y <= button_y_top):
             toggle_play_pause()
 
         # Close button
-        elif close_button_x_min <= world_x <= close_button_x_max and button_y_bottom <= world_y <= button_y_top:
+        elif (close_button_x_min <= world_x <= close_button_x_max and
+              button_y_bottom <= world_y <= button_y_top):
             close_application()
 
 def on_keyboard(key, x, y):
@@ -305,14 +263,14 @@ def on_keyboard(key, x, y):
         glutPostRedisplay()
 
 def reset_action():
-    global sweep_angle, devices
+    global sweep_angle
     sweep_angle = 0.0
-    devices = []
-    print("System startover.")
-    asyncio.run(discover_devices())
 
 def toggle_play_pause():
     global paused
+    # When paused = False, radar moves; when True, radar stops
+    # We also invert the meaning of the symbol: if paused == True (previously), 
+    # that means we were showing a play symbol. After toggling, now we show pause and radar moves.
     paused = not paused
 
 def close_application():
@@ -320,8 +278,6 @@ def close_application():
     sys.exit(0)
 
 def main():
-    asyncio.run(discover_devices())
-    sound_wave.play()
     glutInit()
     glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGB)
     glutInitWindowSize(width, height)
